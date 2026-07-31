@@ -4,9 +4,12 @@ import { encodeSdpToFrames, isSdpFrame, SdpFrameReceiver } from '../lib/sdpFrame
 import { createAnswerer, closeConnection, type Answerer } from '../lib/rtc';
 import { receiveFile, type TransferManifest } from '../lib/transfer';
 import { openCamera, startScanning, type ScannerHandle } from '../lib/scanner';
-import { formatBytes } from '../lib/format';
+import { ThroughputTracker } from '../lib/throughput';
+import { formatBytes, formatDuration } from '../lib/format';
 import QRCarousel from './QRCarousel';
 import ProgressBar from './ProgressBar';
+import StatusBanner from './StatusBanner';
+import StepIndicator from './StepIndicator';
 
 interface Props {
   onBack: () => void;
@@ -27,10 +30,12 @@ export default function ReceiverView({ onBack }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [stage, setStage] = useState<Stage>('starting');
   const [errorMsg, setErrorMsg] = useState('');
+  const [mode, setMode] = useState<Mode>(null);
 
   const [offerProgress, setOfferProgress] = useState({ received: 0, total: 0 });
   const [answerFrames, setAnswerFrames] = useState<string[] | null>(null);
   const [rtcProgress, setRtcProgress] = useState({ received: 0, total: 0 });
+  const [rtcSpeed, setRtcSpeed] = useState(0);
   const [rtcManifest, setRtcManifest] = useState<TransferManifest | null>(null);
 
   const [legacyManifest, setLegacyManifest] = useState<FileManifest | null>(null);
@@ -79,7 +84,12 @@ export default function ReceiverView({ onBack }: Props) {
         const channel = await answerer.waitForChannel();
         if (cancelledRef.current) return;
         setStage('transferring-rtc');
-        const { blob, manifest } = await receiveFile(channel, (received, total) => setRtcProgress({ received, total }));
+        setRtcSpeed(0);
+        const tracker = new ThroughputTracker();
+        const { blob, manifest } = await receiveFile(channel, (received, total) => {
+          setRtcProgress({ received, total });
+          setRtcSpeed(tracker.update(received));
+        });
         if (cancelledRef.current) return;
         setRtcManifest(manifest);
         setResult({ blob, name: manifest.name, mime: manifest.mime, size: manifest.size });
@@ -91,8 +101,8 @@ export default function ReceiverView({ onBack }: Props) {
 
     const onFrame = (raw: string) => {
       if (modeRef.current === null) {
-        if (isSdpFrame(raw)) modeRef.current = 'rtc';
-        else if (isFileFrame(raw)) modeRef.current = 'legacy';
+        if (isSdpFrame(raw)) { modeRef.current = 'rtc'; setMode('rtc'); }
+        else if (isFileFrame(raw)) { modeRef.current = 'legacy'; setMode('legacy'); }
         else return;
       }
 
@@ -167,6 +177,8 @@ export default function ReceiverView({ onBack }: Props) {
   };
 
   const showVideo = stage === 'starting' || stage === 'scanning' || stage === 'transferring-legacy';
+  const showRtcStepper = mode === 'rtc' && (stage === 'scanning' || stage === 'pairing-answer' || stage === 'transferring-rtc' || stage === 'done');
+  const rtcStep: 0 | 1 | 2 = stage === 'transferring-rtc' ? 1 : stage === 'done' ? 2 : 0;
 
   return (
     <div className="view">
@@ -175,26 +187,35 @@ export default function ReceiverView({ onBack }: Props) {
 
       {stage === 'error' && <p className="error">{errorMsg}</p>}
 
+      {showRtcStepper && <StepIndicator current={rtcStep} />}
+
       {showVideo && <video ref={videoRef} muted playsInline className="scan-video" />}
 
       {stage === 'starting' && <p className="hint">Requesting camera access&hellip;</p>}
       {stage === 'scanning' && <p className="hint">Point the camera at the sending screen&rsquo;s QR code</p>}
 
-      {stage === 'scanning' && modeRef.current === 'rtc' && offerProgress.total > 0 && (
-        <p className="hint">Connecting: {offerProgress.received} of {offerProgress.total}</p>
+      {stage === 'scanning' && mode === 'rtc' && offerProgress.total > 0 && (
+        <StatusBanner tone="progress">Reading handshake from sender: {offerProgress.received} of {offerProgress.total}</StatusBanner>
       )}
 
       {stage === 'pairing-answer' && answerFrames && (
         <div className="pairing-panel">
-          <p className="hint">Almost there &mdash; point the sending device&rsquo;s camera at this code</p>
+          <StatusBanner tone="success">Handshake received &mdash; here&rsquo;s our response</StatusBanner>
           <QRCarousel frames={answerFrames} />
+          <p className="hint">Point the sending device&rsquo;s camera at this code</p>
         </div>
       )}
 
       {stage === 'transferring-rtc' && (
         <div className="pairing-panel">
-          <p className="hint">Receiving {rtcManifest?.name}&hellip;</p>
-          <p className="hint">{formatBytes(rtcProgress.received)} of {formatBytes(rtcProgress.total)}</p>
+          <StatusBanner tone="success">Connected &mdash; receiving directly, no more QR needed</StatusBanner>
+          <p className="hint">{rtcManifest?.name}</p>
+          <p className="hint">
+            {formatBytes(rtcProgress.received)} of {formatBytes(rtcProgress.total)}
+            {rtcSpeed > 0 && rtcProgress.received < rtcProgress.total && (
+              <> &middot; {formatBytes(rtcSpeed)}/s &middot; {formatDuration((rtcProgress.total - rtcProgress.received) / rtcSpeed)} left</>
+            )}
+          </p>
           <progress value={rtcProgress.received} max={rtcProgress.total || 1} />
         </div>
       )}
@@ -208,6 +229,7 @@ export default function ReceiverView({ onBack }: Props) {
 
       {stage === 'done' && result && (
         <div className="done-panel">
+          {mode === 'rtc' && <StatusBanner tone="success">Transfer complete</StatusBanner>}
           <p>Received <strong>{result.name}</strong> ({formatBytes(result.size)})</p>
           {result.mime.startsWith('image/') && (
             <img className="preview" src={URL.createObjectURL(result.blob)} alt={result.name} />

@@ -5,8 +5,11 @@ import { encodeSdpToFrames, SdpFrameReceiver } from '../lib/sdpFrames';
 import { createOfferer, closeConnection, type Offerer } from '../lib/rtc';
 import { sendFile } from '../lib/transfer';
 import { openCamera, startScanning, type ScannerHandle } from '../lib/scanner';
+import { ThroughputTracker } from '../lib/throughput';
+import { formatBytes, formatDuration } from '../lib/format';
 import QRCarousel from './QRCarousel';
-import { formatBytes } from '../lib/format';
+import StatusBanner from './StatusBanner';
+import StepIndicator from './StepIndicator';
 
 const QUALITY_PRESETS = [
   { id: 'reliable', label: 'Reliable', chunkBytes: 150, hint: 'Best for small screens or older cameras' },
@@ -28,6 +31,7 @@ export default function SenderView({ onBack }: Props) {
   const [offerFrames, setOfferFrames] = useState<string[] | null>(null);
   const [answerProgress, setAnswerProgress] = useState({ received: 0, total: 0 });
   const [sendProgress, setSendProgress] = useState({ sent: 0, total: 0 });
+  const [sendSpeed, setSendSpeed] = useState(0);
 
   // Legacy (QR-only, no network) mode state
   const [quality, setQuality] = useState<QualityId>('balanced');
@@ -82,7 +86,13 @@ export default function SenderView({ onBack }: Props) {
       await offerer.waitUntilConnected();
       if (cancelledRef.current) return;
       setStage('transferring');
-      await sendFile(offerer.channel, selected, (sent, total) => setSendProgress({ sent, total }));
+      setSendProgress({ sent: 0, total: selected.size });
+      setSendSpeed(0);
+      const tracker = new ThroughputTracker();
+      await sendFile(offerer.channel, selected, (sent, total) => {
+        setSendProgress({ sent, total });
+        setSendSpeed(tracker.update(sent));
+      });
       if (cancelledRef.current) return;
       setStage('done');
     } catch (e) {
@@ -177,6 +187,8 @@ export default function SenderView({ onBack }: Props) {
     setStage('picking');
   };
 
+  const rtcStep: 0 | 1 | 2 = stage === 'transferring' ? 1 : stage === 'done' ? 2 : 0;
+
   return (
     <div className="view">
       <button className="back-btn" onClick={onBack}>&larr; Back</button>
@@ -194,34 +206,48 @@ export default function SenderView({ onBack }: Props) {
         </div>
       )}
 
+      {(stage === 'pairing' || stage === 'connecting' || stage === 'transferring' || stage === 'done') && (
+        <StepIndicator current={rtcStep} />
+      )}
+
       {stage === 'pairing' && (
         <div className="pairing-panel">
-          <p className="hint">Step 1 of 2: connecting devices</p>
           {offerFrames ? <QRCarousel frames={offerFrames} /> : <p className="hint">Preparing&hellip;</p>}
           <p className="hint">Point this device&rsquo;s camera at the receiving screen&rsquo;s QR code</p>
           <video ref={videoRef} muted playsInline className="scan-video scan-video-small" />
-          {answerProgress.total > 0 && (
-            <p className="hint">Reading response: {answerProgress.received} of {answerProgress.total}</p>
+          {answerProgress.total > 0 ? (
+            <StatusBanner tone="progress">Reading response from other device: {answerProgress.received} of {answerProgress.total}</StatusBanner>
+          ) : (
+            <p className="hint">Waiting for the other device to scan this&hellip;</p>
           )}
           <button onClick={() => useLegacy(file)}>Use QR-only instead (no network)</button>
         </div>
       )}
 
       {stage === 'connecting' && (
-        <p className="hint">Connecting&hellip;</p>
+        <div className="pairing-panel">
+          <StatusBanner tone="success">Response received &mdash; paired with the other device</StatusBanner>
+          <StatusBanner tone="progress">Opening a direct connection&hellip;</StatusBanner>
+        </div>
       )}
 
       {stage === 'transferring' && (
         <div className="pairing-panel">
-          <p className="hint">Step 2 of 2: sending {file?.name}</p>
-          <p className="hint">{formatBytes(sendProgress.sent)} of {formatBytes(sendProgress.total)}</p>
+          <StatusBanner tone="success">Connected &mdash; sending directly, no more QR needed</StatusBanner>
+          <p className="hint">{file?.name}</p>
+          <p className="hint">
+            {formatBytes(sendProgress.sent)} of {formatBytes(sendProgress.total)}
+            {sendSpeed > 0 && sendProgress.sent < sendProgress.total && (
+              <> &middot; {formatBytes(sendSpeed)}/s &middot; {formatDuration((sendProgress.total - sendProgress.sent) / sendSpeed)} left</>
+            )}
+          </p>
           <progress value={sendProgress.sent} max={sendProgress.total || 1} />
         </div>
       )}
 
       {stage === 'done' && (
         <div className="pairing-panel">
-          <p>Sent {file?.name} &#10003;</p>
+          <StatusBanner tone="success">Sent {file?.name}</StatusBanner>
           <button onClick={reset}>Send another file</button>
         </div>
       )}
