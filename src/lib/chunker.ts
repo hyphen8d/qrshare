@@ -24,7 +24,7 @@ export interface EncodedFrames {
   manifest: FileManifest;
 }
 
-const DEFAULT_CHUNK_BYTES = 700; // ~ QR version 14-ish at M error correction
+const DEFAULT_CHUNK_BYTES = 350; // ~QR v15, 77x77 modules — the 'Balanced' preset in SenderView
 
 export async function encodeFileToFrames(
   file: File,

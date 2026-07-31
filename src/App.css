@@ -128,3 +128,27 @@ button:hover { filter: brightness(1.1); }
 .preview { max-width: 90vw; max-height: 50vh; border-radius: 12px; }
 
 input[type='range'] { width: 100%; }
+
+.quality-picker {
+  border: 1px solid #2a2f3a;
+  border-radius: 12px;
+  padding: 12px 14px 14px;
+  margin: 4px 0 16px;
+  width: 100%;
+  max-width: 420px;
+  text-align: left;
+}
+.quality-picker legend { color: var(--muted); padding: 0 4px; font-size: 0.85rem; }
+.quality-opt {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 8px 4px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.quality-opt.selected { background: #22262f; }
+.quality-opt input { accent-color: var(--accent); }
+.quality-name { font-weight: 600; min-width: 76px; }
+.quality-hint { color: var(--muted); font-size: 0.85rem; }
+

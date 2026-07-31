@@ -4,12 +4,29 @@ import { encodeFileToFrames, type FileManifest } from '../lib/chunker';
 
 const DEFAULT_INTERVAL_MS = 150;
 
+// Chunk size trades frame count against how dense (and hard to scan) each QR
+// code is. Measured against a 360px render at error-correction level M:
+//   150B/chunk -> QR v9  (53x53 modules,  ~6.8px/module)
+//   350B/chunk -> QR v15 (77x77 modules,  ~4.7px/module)
+//   700B/chunk -> QR v22 (105x105 modules, ~3.4px/module)
+// Denser codes need a bigger screen, better focus, and closer range to
+// scan reliably — a laptop webcam reading a phone screen wants "Reliable"
+// or "Balanced", not "Fast".
+const QUALITY_PRESETS = [
+  { id: 'reliable', label: 'Reliable', chunkBytes: 150, hint: 'Best for small screens or older cameras' },
+  { id: 'balanced', label: 'Balanced', chunkBytes: 350, hint: 'Good default for most phones and webcams' },
+  { id: 'fast', label: 'Fast', chunkBytes: 700, hint: 'Fewer frames — needs a larger screen and a good camera' }
+] as const;
+
+type QualityId = (typeof QUALITY_PRESETS)[number]['id'];
+
 interface Props {
   onBack: () => void;
 }
 
 export default function SenderView({ onBack }: Props) {
   const [file, setFile] = useState<File | null>(null);
+  const [quality, setQuality] = useState<QualityId>('balanced');
   const [frames, setFrames] = useState<string[] | null>(null);
   const [manifest, setManifest] = useState<FileManifest | null>(null);
   const [current, setCurrent] = useState(0);
@@ -27,12 +44,12 @@ export default function SenderView({ onBack }: Props) {
     return () => clearInterval(id);
   }, [playing, frames, intervalMs]);
 
-  const handleFile = useCallback(async (selected: File) => {
+  const encode = useCallback(async (selected: File, qualityId: QualityId) => {
     setError(null);
     setEncoding(true);
-    setFrames(null);
     try {
-      const { frames: encoded, manifest: m } = await encodeFileToFrames(selected);
+      const chunkBytes = QUALITY_PRESETS.find((q) => q.id === qualityId)!.chunkBytes;
+      const { frames: encoded, manifest: m } = await encodeFileToFrames(selected, chunkBytes);
       setFile(selected);
       setManifest(m);
       setFrames(encoded);
@@ -47,13 +64,18 @@ export default function SenderView({ onBack }: Props) {
 
   const onInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
-    if (f) handleFile(f);
+    if (f) encode(f, quality);
   };
 
   const onDrop = (e: React.DragEvent) => {
     e.preventDefault();
     const f = e.dataTransfer.files?.[0];
-    if (f) handleFile(f);
+    if (f) encode(f, quality);
+  };
+
+  const onQualityChange = (qualityId: QualityId) => {
+    setQuality(qualityId);
+    if (file) encode(file, qualityId);
   };
 
   const reset = () => {
@@ -67,6 +89,23 @@ export default function SenderView({ onBack }: Props) {
     <div className="view">
       <button className="back-btn" onClick={onBack}>&larr; Back</button>
       <h2>Send a file</h2>
+
+      <fieldset className="quality-picker">
+        <legend>Scan reliability</legend>
+        {QUALITY_PRESETS.map((q) => (
+          <label key={q.id} className={quality === q.id ? 'quality-opt selected' : 'quality-opt'}>
+            <input
+              type="radio"
+              name="quality"
+              value={q.id}
+              checked={quality === q.id}
+              onChange={() => onQualityChange(q.id)}
+            />
+            <span className="quality-name">{q.label}</span>
+            <span className="quality-hint">{q.hint}</span>
+          </label>
+        ))}
+      </fieldset>
 
       {!file && (
         <div
