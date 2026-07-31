@@ -1,5 +1,6 @@
 import { base45Decode, base45Encode } from './base45';
 import { crc16Hex } from './crc16';
+import { gzip, gunzip } from './compression';
 
 // Wire format, kept deliberately plain-text/alphanumeric so it packs into
 // QR "alphanumeric mode" instead of the less dense "byte mode":
@@ -99,6 +100,11 @@ function parseFrame(raw: string): ParsedFrame | null {
   return { kind: 'data', index, total, crc, payload };
 }
 
+/** True if `raw` at least starts with the Q1 tag — used by the receiver to route scanned frames without fully parsing them. */
+export function isFileFrame(raw: string): boolean {
+  return raw.startsWith(`${PROTOCOL}:`);
+}
+
 export class FrameReceiver {
   private chunks = new Map<number, Uint8Array>();
   private total: number | null = null;
@@ -167,14 +173,4 @@ function concat(arrays: Uint8Array[]): Uint8Array {
     offset += a.length;
   }
   return out;
-}
-
-async function gzip(data: Uint8Array): Promise<Uint8Array> {
-  const stream = new Blob([data as BlobPart]).stream().pipeThrough(new CompressionStream('gzip'));
-  return new Uint8Array(await new Response(stream).arrayBuffer());
-}
-
-async function gunzip(data: Uint8Array): Promise<Uint8Array> {
-  const stream = new Blob([data as BlobPart]).stream().pipeThrough(new DecompressionStream('gzip'));
-  return new Uint8Array(await new Response(stream).arrayBuffer());
 }
