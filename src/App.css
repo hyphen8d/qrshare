@@ -1,33 +1,130 @@
-.App {
-  text-align: center;
+:root {
+  color-scheme: dark;
+  --bg: #111318;
+  --panel: #1a1d24;
+  --accent: #5b8cff;
+  --text: #e9ecf1;
+  --muted: #9aa2b1;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
-.App-logo {
-  animation: App-logo-spin infinite 20s linear;
-  height: 40vmin;
-  pointer-events: none;
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
 }
 
-.App-header {
-  background-color: white;
+.view {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
   align-items: center;
+  padding: 24px 16px 48px;
+  text-align: center;
+}
+
+.home {
   justify-content: center;
-  font-size: calc(10px + 2vmin);
-  color: white;
+  gap: 8px;
 }
 
-.App-link {
-  color: #61dafb;
+h1 { font-size: 2.25rem; margin-bottom: 4px; }
+.tagline { color: var(--muted); max-width: 34ch; margin-bottom: 32px; }
+
+.home-buttons { display: flex; gap: 16px; flex-wrap: wrap; justify-content: center; }
+
+.big-btn, button {
+  font-size: 1.15rem;
+  padding: 14px 28px;
+  border-radius: 12px;
+  border: 1px solid #2a2f3a;
+  background: var(--panel);
+  color: var(--text);
+  cursor: pointer;
 }
 
-@keyframes App-logo-spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
+.big-btn {
+  min-width: 160px;
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #08101f;
+  font-weight: 600;
 }
+
+button:hover { filter: brightness(1.1); }
+
+.back-btn {
+  align-self: flex-start;
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  font-size: 1rem;
+  padding: 4px 0;
+  margin-bottom: 12px;
+}
+
+.dropzone {
+  width: 100%;
+  max-width: 420px;
+  border: 2px dashed #333a48;
+  border-radius: 16px;
+  padding: 48px 16px;
+  margin-top: 24px;
+  cursor: pointer;
+  color: var(--muted);
+}
+
+.hint { color: var(--muted); margin: 10px 0; }
+.error { color: #ff6b6b; }
+
+.qr-wrap {
+  background: #fff;
+  padding: 16px;
+  border-radius: 16px;
+  display: inline-block;
+  margin: 16px 0;
+}
+
+.controls { display: flex; gap: 12px; justify-content: center; margin: 12px 0; }
+
+.speed-label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 0.9rem;
+  width: 100%;
+  max-width: 320px;
+  margin: 8px 0;
+}
+
+.scan-video {
+  width: 100%;
+  max-width: 480px;
+  border-radius: 16px;
+  background: #000;
+  margin: 16px 0;
+}
+
+.progress-wrap { width: 100%; max-width: 480px; }
+.progress-label { color: var(--muted); margin-bottom: 6px; }
+.progress-cells {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  justify-content: center;
+}
+.cell {
+  width: 8px;
+  height: 16px;
+  background: #2a2f3a;
+  border-radius: 2px;
+}
+.cell-got { background: var(--accent); }
+
+.done-panel { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+.preview { max-width: 90vw; max-height: 50vh; border-radius: 12px; }
+
+input[type='range'] { width: 100%; }
